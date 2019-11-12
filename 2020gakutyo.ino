@@ -1,5 +1,6 @@
 #include <CytronMotorDriver.h>
 #include <Servo.h>
+#include <HCSR04.h>
 #define MAXSUM 3000
 
 CytronMD right_motor(PWM_PWM, 6, 7);
@@ -7,6 +8,9 @@ CytronMD left_motor(PWM_PWM, 8, 9);
 
 Servo arm, wrist;
 Servo rfinger, lfinger;
+
+// echo, trig
+HCSR04 frontUltrasound(50, 52);
 
 enum Point {highest, lower, halfway, open, close, shoot, maxpoint};
 int armpoint[maxpoint];
