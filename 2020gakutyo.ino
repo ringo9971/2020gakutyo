@@ -89,12 +89,15 @@ void loop(){
 
 /////////////////////////////////////////////////////////////////
 // motor
+
+// 進ませる
 void motorDrive(){
   right_motor.setSpeed(rightspeed);
   left_motor.setSpeed(leftspeed);
 }
 
-void calc_speed(int speed, int r, int l){
+// 目標まで進む
+void moveToGoal(int speed, int r, int l){
   rightsum = constrain(rightsum+right_target_cnt-rightcnt, -MAXSUM, MAXSUM);
   leftsum = constrain(leftsum+left_target_cnt-leftcnt, -MAXSUM, MAXSUM);
 
@@ -110,30 +113,30 @@ void calc_speed(int speed, int r, int l){
   pastrightspeed = rightspeed;
   pastleftspeed = leftspeed;
 
-  // モーターを回す
   motorDrive();
 
-  // 待機児童
   do{
     now = micros();
   }while(now-loopTimer <= 1000);
 }
 
+// 差を埋める
 void embed_difference(int r, int l){
   gap = l*(leftcnt-past_left_target_cnt)-r*(rightcnt-past_right_target_cnt);
   gap_sum = constrain(gap_sum+gap, -MAXSUM, MAXSUM);
   deviation = gap*sumpgain+gap_sum*sumigain;
 
-  // 左右の差をなくす
   rightspeed = constrain(rightspeed+r*deviation, -255, 255);
   leftspeed = constrain(leftspeed-l*deviation, -255, 255);
 }
 
+// ターゲットの更新
 void updateTargetCnt(){
   past_right_target_cnt = rightcnt;
   past_left_target_cnt = leftcnt;
 }
 
+// 目標と一致したか
 boolean is_matched(){
   if(rightcnt == right_target_cnt && leftcnt == left_target_cnt){
     rightsum = 0;
@@ -152,6 +155,7 @@ boolean is_matched(){
   return false;
 }
 
+// 任意の距離前進
 int forward(int speed, double dist){
   loopTimer = micros();
   if(is_first_time){
@@ -160,11 +164,12 @@ int forward(int speed, double dist){
     is_first_time = false;
   }
 
-  calc_speed(speed, 1, 1);
+  moveToGoal(speed, 1, 1);
 
   if(is_matched()) return 0;
   return 1;
 }
+// 任意の速度で前進
 void forward(int speed){
   loopTimer = micros();
 
@@ -181,6 +186,7 @@ void forward(){
   forward(255);
 }
 
+// 任意の距離後退
 int back(int speed, double dist){
   loopTimer = micros();
   if(is_first_time){
@@ -189,11 +195,12 @@ int back(int speed, double dist){
     is_first_time = false;
   }
 
-  calc_speed(speed, -1, -1);
+  moveToGoal(speed, -1, -1);
 
   if(is_matched()) return 0;
   return 1;
 }
+// 任意の速度で後退
 void back(int speed){
   loopTimer = micros();
 
@@ -210,6 +217,7 @@ void back(){
   back(255);
 }
 
+// 任意の角度右旋回
 int right_rotation(int speed, double rad){
   loopTimer = micros();
   if(is_first_time){
@@ -218,11 +226,12 @@ int right_rotation(int speed, double rad){
     is_first_time = false;
   }
 
-  calc_speed(speed, -1, 1);
+  moveToGoal(speed, -1, 1);
 
   if(is_matched()) return 0;
   return 1;
 }
+// 任意の速度で右旋回
 void right_rotation(int speed){
   loopTimer = micros();
 
@@ -239,6 +248,7 @@ void right_rotation(){
   right_rotation(255);
 }
 
+// 任意の角度左旋回
 int left_rotation(int speed, double rad){
   loopTimer = micros();
   if(is_first_time){
@@ -247,11 +257,12 @@ int left_rotation(int speed, double rad){
     is_first_time = false;
   }
 
-  calc_speed(speed, 1, -1);
+  moveToGoal(speed, 1, -1);
 
   if(is_matched()) return 0;
   return 1;
 }
+// 任意の速度で左旋回
 void left_rotation(int speed){
   loopTimer = micros();
 
@@ -268,6 +279,7 @@ void left_rotation(){
   left_rotation(255);
 }
 
+// ブレーキ
 void brake(){
   right_motor.setSpeed(0);
   left_motor.setSpeed(0);
@@ -276,16 +288,19 @@ void brake(){
 
 /////////////////////////////////////////////////////////////////
 // servo
+// アームを動かす
 void MoveArm(Point e) {
   arm.writeMicroseconds(armpoint[e]);
   wrist.writeMicroseconds(wristpoint[e]);
 }
 
+// 指を動かす
 void MoveFinger(Point e) {
   rfinger.writeMicroseconds(rfingerpoint[e]);
   lfinger.writeMicroseconds(lfingerpoint[e]);
 }
 
+// ボールを持ち上げる動作
 void lift() {
   for (int i = wristpoint[lower]; i <= wristpoint[halfway]; i++) {
     wrist.writeMicroseconds(i);
@@ -299,6 +314,7 @@ void lift() {
   }
 }
 
+// 上から初期に戻す動作
 void take_down() {
   for (int i = armpoint[highest]; i <= armpoint[lower]; i++) {
     arm.writeMicroseconds(i);
@@ -309,6 +325,7 @@ void take_down() {
   }
 }
 
+// シュートする動作
 void ballShoot() {
   for(int i = wristpoint[highest]; i >= wristpoint[shoot]; i--){
     wrist.writeMicroseconds(i);
@@ -320,6 +337,7 @@ void ballShoot() {
 
 
 /////////////////////////////////////////////////////////////////
+// 右のエンコーダーを読む
 void read_enca(){
   if(!!(PIOB->PIO_PDSR & (1<<25)) == !!(PIOC->PIO_PDSR & (1<<28)))
     rightcnt++;
@@ -327,6 +345,7 @@ void read_enca(){
     rightcnt--;
 }
 
+// 左のエンコーダーを読む
 void read_encb(){
   if(!!(PIOC->PIO_PDSR & (1<<26)) == !!(PIOC->PIO_PDSR & (1<<25)))
     leftcnt++;
