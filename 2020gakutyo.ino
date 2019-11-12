@@ -12,9 +12,9 @@ const int cnt_par_round = 918;
 const double pgain = 1.0, igain = 0.010, dgain = 0;
 const double sumpgain = 1.0, sumigain = 0.01;
 
-int8_t rightspeed, leftspeed;
-int8_t pastrightspeed = 0, pastleftspeed = 0;
-int8_t manipulation;
+int16_t rightspeed, leftspeed;
+int16_t pastrightspeed = 0, pastleftspeed = 0;
+int16_t deviation;
 
 int32_t gap, pastgap = 0;
 int32_t gap_sum = 0;
@@ -31,6 +31,8 @@ boolean is_first_time = true;
 int32_t rightcnt = 0, leftcnt = 0;
 
 void setup(){
+  Serial.begin(115200);
+  
   pinMode(3, INPUT);
   pinMode(5, INPUT);
 
@@ -49,10 +51,6 @@ void setup(){
 }
 
 void loop(){
-  while(forward(100, 5));
-  delay(500);
-  while(back(100, 5));
-  delay(500);
 }
 
 void motorDrive(){
@@ -61,10 +59,6 @@ void motorDrive(){
 }
 
 void calc_speed(int speed, int r, int l){
-  gap = l*(leftcnt-past_left_target_cnt)-r*(rightcnt-past_right_target_cnt);
-  gap_sum = constrain(gap_sum+gap, -MAXSUM, MAXSUM);
-  manipulation = gap*sumpgain+gap_sum*sumigain;
-
   rightsum = constrain(rightsum+right_target_cnt-rightcnt, -MAXSUM, MAXSUM);
   leftsum = constrain(leftsum+left_target_cnt-leftcnt, -MAXSUM, MAXSUM);
 
@@ -72,9 +66,7 @@ void calc_speed(int speed, int r, int l){
   rightspeed = constrain((right_target_cnt-rightcnt)*pgain+rightsum*igain+(rightspeed-pastrightspeed)*dgain, -speed, speed);
   leftspeed = constrain((left_target_cnt-leftcnt)*pgain+leftsum*igain+(leftspeed-pastleftspeed)*dgain, -speed, speed);
 
-  // 左右の差をなくす
-  rightspeed = constrain(rightspeed+r*manipulation, -255, 255);
-  leftspeed = constrain(leftspeed-l*manipulation, -255, 255);
+  hogehoge(r, l);
 
   if(rightcnt == right_target_cnt) rightspeed = 0;
   if(leftcnt == left_target_cnt) leftspeed = 0;
@@ -86,10 +78,24 @@ void calc_speed(int speed, int r, int l){
   motorDrive();
 
   // 待機児童
-  now = micros();
-  while(now-loopTimer <= 1000){
+  do{
     now = micros();
-  };
+  }while(now-loopTimer <= 1000);
+}
+
+void hogehoge(int r, int l){
+  gap = l*(leftcnt-past_left_target_cnt)-r*(rightcnt-past_right_target_cnt);
+  gap_sum = constrain(gap_sum+gap, -MAXSUM, MAXSUM);
+  deviation = gap*sumpgain+gap_sum*sumigain;
+
+  // 左右の差をなくす
+  rightspeed = constrain(rightspeed+r*deviation, -255, 255);
+  leftspeed = constrain(leftspeed-l*deviation, -255, 255);
+}
+
+void updateTargetCnt(){
+  past_right_target_cnt = rightcnt;
+  past_left_target_cnt = leftcnt;
 }
 
 boolean is_matched(){
@@ -99,8 +105,7 @@ boolean is_matched(){
     gap_sum = 0;
     if(delayTimer-millis() >= 500){
       brake();
-      past_right_target_cnt = right_target_cnt;
-      past_left_target_cnt = left_target_cnt;
+      updateTargetCnt();
       is_first_time = true;
       return true;
     }
@@ -124,11 +129,20 @@ int forward(int speed, double dist){
   if(is_matched()) return 0;
   return 1;
 }
-int forward(int speed){
-  return forward(speed, INF);
+void forward(int speed){
+  loopTimer = micros();
+
+  rightspeed = speed;
+  leftspeed = speed;
+  hogehoge(1, 1);
+  motorDrive();
+
+  do{
+    now = micros();
+  }while(now-loopTimer <= 1000);
 }
-int forward(){
-  return forward(255);
+void forward(){
+  forward(255);
 }
 
 int back(int speed, double dist){
@@ -144,11 +158,20 @@ int back(int speed, double dist){
   if(is_matched()) return 0;
   return 1;
 }
-int back(int speed){
-  return back(speed, INF);
+void back(int speed){
+  loopTimer = micros();
+
+  rightspeed = -speed;
+  leftspeed = -speed;
+  hogehoge(-1, -1);
+  motorDrive();
+
+  do{
+    now = micros();
+  }while(now-loopTimer <= 1000);
 }
-int back(){
-  return back(255);
+void back(){
+  back(255);
 }
 
 int right_rotation(int speed, double rad){
@@ -164,11 +187,17 @@ int right_rotation(int speed, double rad){
   if(is_matched()) return 0;
   return 1;
 }
-int right_rotation(int speed){
-  return right_rotation(speed, INF);
+void right_rotation(int speed){
+  rightspeed = -speed;
+  leftspeed = speed;
+  hogehoge(-1, 1);
+  motorDrive();
+  do{
+    now = micros();
+  }while(now-loopTimer <= 1000);
 }
-int right_rotation(){
-  return right_rotation(255);
+void right_rotation(){
+  right_rotation(255);
 }
 
 int left_rotation(int speed, double rad){
@@ -184,14 +213,23 @@ int left_rotation(int speed, double rad){
   if(is_matched()) return 0;
   return 1;
 }
-int left_rotation(int speed){
-  return left_rotation(speed, INF);
+void left_rotation(int speed){
+  loopTimer = micros();
+
+  rightspeed = speed;
+  leftspeed = -speed;
+  hogehoge(1, -1);
+  motorDrive();
+
+  do{
+    now = micros();
+  }while(now-loopTimer <= 1000);
 }
-int left_rotation(){
-  return left_rotation(255);
+void left_rotation(){
+  left_rotation(255);
 }
 
-int brake(){
+void brake(){
   right_motor.setSpeed(0);
   left_motor.setSpeed(0);
 }
