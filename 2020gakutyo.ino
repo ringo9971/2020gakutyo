@@ -1,9 +1,18 @@
 #include <CytronMotorDriver.h>
-#define INF 1e7
+#include <Servo.h>
 #define MAXSUM 3000
 
 CytronMD right_motor(PWM_PWM, 6, 7);
 CytronMD left_motor(PWM_PWM, 8, 9);
+
+Servo arm, wrist;
+Servo rfinger, lfinger;
+
+enum Point {highest, lower, halfway, open, close, shoot, maxpoint};
+int armpoint[maxpoint];
+int wristpoint[maxpoint];
+int rfingerpoint[maxpoint];
+int lfingerpoint[maxpoint];
 
 const double radius = 5.8/2;
 const double tread = 18.0;
@@ -44,7 +53,31 @@ void setup(){
   attachInterrupt(digitalPinToInterrupt(2), read_enca, CHANGE);
   attachInterrupt(digitalPinToInterrupt(4), read_encb, CHANGE);
 
-  delay(10);
+  arm.attach(22);
+  wrist.attach(24);
+  rfinger.attach(26);
+  lfinger.attach(28);
+
+  armpoint[highest] = 730;
+  armpoint[lower]   = 2150;
+  wristpoint[highest] = 800;
+  wristpoint[halfway] = 2300;
+  wristpoint[lower]   = 2000;
+  wristpoint[shoot] = 600;
+
+  rfingerpoint[open] = 1100;
+  rfingerpoint[close] = 700;
+  rfingerpoint[shoot] = 800;
+  lfingerpoint[open] = 1850;
+  lfingerpoint[close] = 2250;
+  lfingerpoint[shoot] = 2150;
+
+  arm.writeMicroseconds(1900);
+  wrist.writeMicroseconds(1800);
+  delay(500);
+  rfinger.writeMicroseconds(2250);
+  lfinger.writeMicroseconds(650);
+  delay(1000);
 
   delayTimer = millis();
   loopTimer = micros();
@@ -53,6 +86,9 @@ void setup(){
 void loop(){
 }
 
+
+/////////////////////////////////////////////////////////////////
+// motor
 void motorDrive(){
   right_motor.setSpeed(rightspeed);
   left_motor.setSpeed(leftspeed);
@@ -66,7 +102,7 @@ void calc_speed(int speed, int r, int l){
   rightspeed = constrain((right_target_cnt-rightcnt)*pgain+rightsum*igain+(rightspeed-pastrightspeed)*dgain, -speed, speed);
   leftspeed = constrain((left_target_cnt-leftcnt)*pgain+leftsum*igain+(leftspeed-pastleftspeed)*dgain, -speed, speed);
 
-  hogehoge(r, l);
+  embed_difference(r, l);
 
   if(rightcnt == right_target_cnt) rightspeed = 0;
   if(leftcnt == left_target_cnt) leftspeed = 0;
@@ -83,7 +119,7 @@ void calc_speed(int speed, int r, int l){
   }while(now-loopTimer <= 1000);
 }
 
-void hogehoge(int r, int l){
+void embed_difference(int r, int l){
   gap = l*(leftcnt-past_left_target_cnt)-r*(rightcnt-past_right_target_cnt);
   gap_sum = constrain(gap_sum+gap, -MAXSUM, MAXSUM);
   deviation = gap*sumpgain+gap_sum*sumigain;
@@ -134,7 +170,7 @@ void forward(int speed){
 
   rightspeed = speed;
   leftspeed = speed;
-  hogehoge(1, 1);
+  embed_difference(1, 1);
   motorDrive();
 
   do{
@@ -163,7 +199,7 @@ void back(int speed){
 
   rightspeed = -speed;
   leftspeed = -speed;
-  hogehoge(-1, -1);
+  embed_difference(-1, -1);
   motorDrive();
 
   do{
@@ -188,10 +224,13 @@ int right_rotation(int speed, double rad){
   return 1;
 }
 void right_rotation(int speed){
+  loopTimer = micros();
+
   rightspeed = -speed;
   leftspeed = speed;
-  hogehoge(-1, 1);
+  embed_difference(-1, 1);
   motorDrive();
+
   do{
     now = micros();
   }while(now-loopTimer <= 1000);
@@ -218,7 +257,7 @@ void left_rotation(int speed){
 
   rightspeed = speed;
   leftspeed = -speed;
-  hogehoge(1, -1);
+  embed_difference(1, -1);
   motorDrive();
 
   do{
@@ -235,6 +274,52 @@ void brake(){
 }
 
 
+/////////////////////////////////////////////////////////////////
+// servo
+void MoveArm(Point e) {
+  arm.writeMicroseconds(armpoint[e]);
+  wrist.writeMicroseconds(wristpoint[e]);
+}
+
+void MoveFinger(Point e) {
+  rfinger.writeMicroseconds(rfingerpoint[e]);
+  lfinger.writeMicroseconds(lfingerpoint[e]);
+}
+
+void lift() {
+  for (int i = wristpoint[lower]; i <= wristpoint[halfway]; i++) {
+    wrist.writeMicroseconds(i);
+    delay(1);
+  }
+  delay(1000);
+  for (int i = armpoint[lower]; i >= armpoint[highest]; i--) {
+    arm.writeMicroseconds(i);
+    wrist.writeMicroseconds(int(map(i, armpoint[lower], armpoint[highest], wristpoint[halfway], wristpoint[highest])));
+    delay(2);
+  }
+}
+
+void take_down() {
+  for (int i = armpoint[highest]; i <= armpoint[lower]; i++) {
+    arm.writeMicroseconds(i);
+    wrist.writeMicroseconds(int(map(i, armpoint[lower], armpoint[highest], wristpoint[lower], wristpoint[shoot])));
+    rfinger.writeMicroseconds(int(map(i, armpoint[lower], armpoint[highest], rfingerpoint[open], rfingerpoint[shoot])));
+    lfinger.writeMicroseconds(int(map(i, armpoint[lower], armpoint[highest], lfingerpoint[open], lfingerpoint[shoot])));
+    delay(2);
+  }
+}
+
+void ballShoot() {
+  for(int i = wristpoint[highest]; i >= wristpoint[shoot]; i--){
+    wrist.writeMicroseconds(i);
+    delay(2);
+  }
+  rfinger.writeMicroseconds(rfingerpoint[shoot]);
+  lfinger.writeMicroseconds(lfingerpoint[shoot]);
+}
+
+
+/////////////////////////////////////////////////////////////////
 void read_enca(){
   if(!!(PIOB->PIO_PDSR & (1<<25)) == !!(PIOC->PIO_PDSR & (1<<28)))
     rightcnt++;
