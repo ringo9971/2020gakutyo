@@ -3,7 +3,7 @@
 #include <HCSR04.h>
 #define MAXSUM 3000
 
-CytronMD right_motor(PWM_PWM, 2, 1);
+CytronMD right_motor(PWM_PWM, 2, 7);
 CytronMD left_motor(PWM_PWM, 3, 4);
 
 Servo arm, wrist;
@@ -23,7 +23,7 @@ const double tread = 18.0;
 const int cnt_par_round = 918;
 
 const double pgain = 1.0, igain = 0.010, dgain = 0;
-const double sumpgain = 1.0, sumigain = 0.01;
+const double sumpgain = 1.0, sumigain = 0.008;
 
 int16_t rightspeed, leftspeed;
 int16_t pastrightspeed = 0, pastleftspeed = 0;
@@ -44,7 +44,6 @@ boolean is_first_time = true;
 int32_t rightcnt = 0, leftcnt = 0;
 
 void setup(){
-  /* Serial.begin(115200); */
   pinMode(1, OUTPUT);
   pinMode(2, OUTPUT);
   pinMode(3, OUTPUT);
@@ -84,13 +83,18 @@ void setup(){
 }
 
 void loop(){
-  while(forward(200, 30));
-  delay(10000);
 }
 
 
 /////////////////////////////////////////////////////////////////
 // motor
+
+// 待機
+void wait(){
+  do{
+    now = micros();
+  }while(now-loopTimer <= 1000);
+}
 
 // 進ませる
 void motorDrive(){
@@ -117,9 +121,7 @@ void moveToGoal(int speed, int r, int l){
 
   motorDrive();
 
-  do{
-    now = micros();
-  }while(now-loopTimer <= 1000);
+  wait();
 }
 
 // 差を埋める
@@ -180,9 +182,7 @@ void forward(int speed){
   embed_difference(1, 1);
   motorDrive();
 
-  do{
-    now = micros();
-  }while(now-loopTimer <= 1000);
+  wait();
 }
 void forward(){
   forward(255);
@@ -211,9 +211,7 @@ void back(int speed){
   embed_difference(-1, -1);
   motorDrive();
 
-  do{
-    now = micros();
-  }while(now-loopTimer <= 1000);
+  wait();
 }
 void back(){
   back(255);
@@ -242,9 +240,7 @@ void right_rotation(int speed){
   embed_difference(-1, 1);
   motorDrive();
 
-  do{
-    now = micros();
-  }while(now-loopTimer <= 1000);
+  wait();
 }
 void right_rotation(){
   right_rotation(255);
@@ -273,9 +269,7 @@ void left_rotation(int speed){
   embed_difference(1, -1);
   motorDrive();
 
-  do{
-    now = micros();
-  }while(now-loopTimer <= 1000);
+  wait();
 }
 void left_rotation(){
   left_rotation(255);
