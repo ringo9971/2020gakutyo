@@ -3,8 +3,8 @@
 #include <HCSR04.h>
 #define MAXSUM 3000
 
-CytronMD right_motor(PWM_PWM, 6, 7);
-CytronMD left_motor(PWM_PWM, 8, 9);
+CytronMD right_motor(PWM_PWM, 2, 1);
+CytronMD left_motor(PWM_PWM, 3, 4);
 
 Servo arm, wrist;
 Servo rfinger, lfinger;
@@ -44,35 +44,31 @@ boolean is_first_time = true;
 int32_t rightcnt = 0, leftcnt = 0;
 
 void setup(){
-  Serial.begin(115200);
-  
-  pinMode(3, INPUT);
-  pinMode(5, INPUT);
+  /* Serial.begin(115200); */
+  pinMode(1, OUTPUT);
+  pinMode(2, OUTPUT);
+  pinMode(3, OUTPUT);
+  pinMode(4, OUTPUT);
 
-  pinMode(6, OUTPUT);
-  pinMode(7, OUTPUT);
-  pinMode(8, OUTPUT);
-  pinMode(9, OUTPUT);
-
-  attachInterrupt(digitalPinToInterrupt(2), read_enca, CHANGE);
-  attachInterrupt(digitalPinToInterrupt(4), read_encb, CHANGE);
+  attachInterrupt(digitalPinToInterrupt(50), read_enca, CHANGE);
+  attachInterrupt(digitalPinToInterrupt(46), read_encb, CHANGE);
 
   arm.attach(22);
   wrist.attach(24);
   rfinger.attach(26);
   lfinger.attach(28);
 
-  armpoint[highest] = 730;
-  armpoint[lower]   = 2150;
+  armpoint[highest]   = 730;
+  armpoint[lower]     = 2150;
   wristpoint[highest] = 800;
   wristpoint[halfway] = 2300;
   wristpoint[lower]   = 2000;
-  wristpoint[shoot] = 600;
+  wristpoint[shoot]   = 600;
 
-  rfingerpoint[open] = 1100;
+  rfingerpoint[open]  = 1100;
   rfingerpoint[close] = 700;
   rfingerpoint[shoot] = 800;
-  lfingerpoint[open] = 1850;
+  lfingerpoint[open]  = 1850;
   lfingerpoint[close] = 2250;
   lfingerpoint[shoot] = 2150;
 
@@ -88,6 +84,8 @@ void setup(){
 }
 
 void loop(){
+  while(forward(200, 30));
+  delay(10000);
 }
 
 
@@ -343,7 +341,7 @@ void ballShoot() {
 /////////////////////////////////////////////////////////////////
 // 右のエンコーダーを読む
 void read_enca(){
-  if(!!(PIOB->PIO_PDSR & (1<<25)) == !!(PIOC->PIO_PDSR & (1<<28)))
+  if(!!(PIOC->PIO_PDSR & (1<<13)) == !!(PIOC->PIO_PDSR & (1<<15)))
     rightcnt++;
   else
     rightcnt--;
@@ -351,7 +349,7 @@ void read_enca(){
 
 // 左のエンコーダーを読む
 void read_encb(){
-  if(!!(PIOC->PIO_PDSR & (1<<26)) == !!(PIOC->PIO_PDSR & (1<<25)))
+  if(!!(PIOC->PIO_PDSR & (1<<17)) == !!(PIOC->PIO_PDSR & (1<<19)))
     leftcnt++;
   else
     leftcnt--;
