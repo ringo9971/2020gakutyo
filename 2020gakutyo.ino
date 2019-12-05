@@ -3,80 +3,69 @@
 #include <HCSR04.h>
 #define MAXSUM 3000
 
+// motor constructor
 CytronMD right_motor(PWM_PWM, 2, 7);
 CytronMD left_motor(PWM_PWM, 3, 4);
 
+// servo constructor
 Servo arm, wrist;
 Servo rfinger, lfinger;
 
 // echo, trig
 HCSR04 frontUltrasound(50, 52);
 
+
+// robot constant
+const double radius = 5.8/2;
+const double tread = 18.0;
+const int cnt_par_round = 918;
+
+// gain
+const double pgain = 1.0, igain = 0.010, dgain = 0;
+const double sumpgain = 1.0, sumigain = 0.008;
+
+// servo
 enum Point {highest, lower, halfway, open, close, shoot, maxpoint};
 int armpoint[maxpoint];
 int wristpoint[maxpoint];
 int rfingerpoint[maxpoint];
 int lfingerpoint[maxpoint];
 
-const double radius = 5.8/2;
-const double tread = 18.0;
-const int cnt_par_round = 918;
-
-const double pgain = 1.0, igain = 0.010, dgain = 0;
-const double sumpgain = 1.0, sumigain = 0.008;
-
+// motor speed
 int16_t rightspeed, leftspeed;
 int16_t pastrightspeed = 0, pastleftspeed = 0;
 int16_t deviation;
 
+// encoder
+int32_t rightcnt = 0, leftcnt = 0;
 int32_t gap, pastgap = 0;
 int32_t gap_sum = 0;
 int32_t rightsum = 0, leftsum = 0;
 int32_t right_target_cnt = 0, left_target_cnt = 0;
 int32_t past_right_target_cnt = 0, past_left_target_cnt = 0;
 
+// timer
 int32_t delayTimer;
 int32_t loopTimer;
 int32_t now;
-boolean flag = false;
+
+// flag
 boolean is_first_time = true;
 
-int32_t rightcnt = 0, leftcnt = 0;
-
 void setup(){
-  pinMode(1, OUTPUT);
-  pinMode(2, OUTPUT);
-  pinMode(3, OUTPUT);
-  pinMode(4, OUTPUT);
+  /* Serial.begin(115200); */
 
   attachInterrupt(digitalPinToInterrupt(50), read_enca, CHANGE);
   attachInterrupt(digitalPinToInterrupt(46), read_encb, CHANGE);
 
-  arm.attach(22);
-  wrist.attach(24);
-  rfinger.attach(26);
-  lfinger.attach(28);
+  servo_init();
 
-  armpoint[highest]   = 730;
-  armpoint[lower]     = 2150;
-  wristpoint[highest] = 800;
-  wristpoint[halfway] = 2300;
-  wristpoint[lower]   = 2000;
-  wristpoint[shoot]   = 600;
-
-  rfingerpoint[open]  = 1100;
-  rfingerpoint[close] = 700;
-  rfingerpoint[shoot] = 800;
-  lfingerpoint[open]  = 1850;
-  lfingerpoint[close] = 2250;
-  lfingerpoint[shoot] = 2150;
-
-  arm.writeMicroseconds(1900);
-  wrist.writeMicroseconds(1800);
-  delay(500);
-  rfinger.writeMicroseconds(2250);
-  lfinger.writeMicroseconds(650);
-  delay(1000);
+  /* arm.writeMicroseconds(1900); */
+  /* wrist.writeMicroseconds(1800); */
+  /* delay(500); */
+  /* rfinger.writeMicroseconds(2250); */
+  /* lfinger.writeMicroseconds(650); */
+  /* delay(1000); */
 
   delayTimer = millis();
   loopTimer = micros();
@@ -88,6 +77,7 @@ void loop(){
 
 /////////////////////////////////////////////////////////////////
 // motor
+/////////////////////////////////////////////////////////////////
 
 // 待機
 void wait(){
@@ -284,6 +274,30 @@ void brake(){
 
 /////////////////////////////////////////////////////////////////
 // servo
+/////////////////////////////////////////////////////////////////
+
+// サーボ角の初期値ぎめ
+void servo_init(){
+  arm.attach(22);
+  wrist.attach(24);
+  rfinger.attach(26);
+  lfinger.attach(28);
+
+  armpoint[highest]   = 730;
+  armpoint[lower]     = 2150;
+  wristpoint[highest] = 800;
+  wristpoint[halfway] = 2300;
+  wristpoint[lower]   = 2000;
+  wristpoint[shoot]   = 600;
+
+  rfingerpoint[open]  = 1100;
+  rfingerpoint[close] = 700;
+  rfingerpoint[shoot] = 800;
+  lfingerpoint[open]  = 1850;
+  lfingerpoint[close] = 2250;
+  lfingerpoint[shoot] = 2150;
+}
+
 // アームを動かす
 void MoveArm(Point e) {
   arm.writeMicroseconds(armpoint[e]);
