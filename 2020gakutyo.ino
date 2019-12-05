@@ -16,13 +16,18 @@ HCSR04 frontUltrasound(50, 52);
 
 
 // robot constant
-const double radius = 5.8/2;
-const double tread = 18.0;
+const double radius = 5.75/2;
+const double tread = 18.5;
 const int cnt_par_round = 918;
 
 // gain
 const double pgain = 1.0, igain = 0.010, dgain = 0;
-const double sumpgain = 1.0, sumigain = 0.008;
+const double sumpgain = 1.8, sumigain = 0.0003, sumdgain = 0.0;
+
+// motor speed
+int16_t rightspeed, leftspeed;
+int16_t pastrightspeed = 0, pastleftspeed = 0;
+int16_t deviation;
 
 // servo
 enum Point {highest, lower, halfway, open, close, shoot, maxpoint};
@@ -31,10 +36,15 @@ int wristpoint[maxpoint];
 int rfingerpoint[maxpoint];
 int lfingerpoint[maxpoint];
 
-// motor speed
-int16_t rightspeed, leftspeed;
-int16_t pastrightspeed = 0, pastleftspeed = 0;
-int16_t deviation;
+// foto sensor
+const int FOT_NUM = 8;
+const int MAXLIGHT = 10000;
+const int MINLIGHT = 0;
+const int MIDDLELIGHT = (MAXLIGHT+MINLIGHT)/2;
+
+int32_t light[FOT_NUM];
+int32_t maxlight[FOT_NUM];
+int32_t minlight[FOT_NUM];
 
 // encoder
 int32_t rightcnt = 0, leftcnt = 0;
@@ -45,6 +55,7 @@ int32_t right_target_cnt = 0, left_target_cnt = 0;
 int32_t past_right_target_cnt = 0, past_left_target_cnt = 0;
 
 // timer
+int32_t motortimer;
 int32_t delayTimer;
 int32_t loopTimer;
 int32_t now;
@@ -68,7 +79,7 @@ void setup(){
   /* delay(1000); */
 
   delayTimer = millis();
-  loopTimer = micros();
+  loopTimer  = micros();
 }
 
 void loop(){
@@ -78,6 +89,10 @@ void loop(){
 /////////////////////////////////////////////////////////////////
 // motor
 /////////////////////////////////////////////////////////////////
+
+// ラインに対して直角に移動する
+void adjust_angle(){
+}
 
 // 待機
 void wait(){
@@ -95,20 +110,29 @@ void motorDrive(){
 // 目標まで進む
 void moveToGoal(int speed, int r, int l){
   rightsum = constrain(rightsum+right_target_cnt-rightcnt, -MAXSUM, MAXSUM);
-  leftsum = constrain(leftsum+left_target_cnt-leftcnt, -MAXSUM, MAXSUM);
+  leftsum  = constrain(leftsum+left_target_cnt-leftcnt, -MAXSUM, MAXSUM);
 
   // PID
   rightspeed = constrain((right_target_cnt-rightcnt)*pgain+rightsum*igain+(rightspeed-pastrightspeed)*dgain, -speed, speed);
-  leftspeed = constrain((left_target_cnt-leftcnt)*pgain+leftsum*igain+(leftspeed-pastleftspeed)*dgain, -speed, speed);
+  leftspeed  = constrain((left_target_cnt-leftcnt)*pgain+leftsum*igain+(leftspeed-pastleftspeed)*dgain, -speed, speed);
 
+  double gain = (double)(millis()-motortimer)/1500;
+  if(1.0 < gain) gain = 1.0;
+  rightspeed *= gain;
+  leftspeed *= gain;
+
+  // 差を無くす
   embed_difference(r, l);
 
+  // 目標到達
   if(rightcnt == right_target_cnt) rightspeed = 0;
-  if(leftcnt == left_target_cnt) leftspeed = 0;
+  if(leftcnt  == left_target_cnt) leftspeed   = 0;
 
+  // 過去の値更新
   pastrightspeed = rightspeed;
-  pastleftspeed = leftspeed;
+  pastleftspeed  = leftspeed;
 
+  // モーターを動かす
   motorDrive();
 
   wait();
@@ -118,24 +142,27 @@ void moveToGoal(int speed, int r, int l){
 void embed_difference(int r, int l){
   gap = l*(leftcnt-past_left_target_cnt)-r*(rightcnt-past_right_target_cnt);
   gap_sum = constrain(gap_sum+gap, -MAXSUM, MAXSUM);
-  deviation = gap*sumpgain+gap_sum*sumigain;
+  // PID
+  deviation = gap*sumpgain+gap_sum*sumigain+(gap-pastgap)*sumdgain;
 
   rightspeed = constrain(rightspeed+r*deviation, -255, 255);
-  leftspeed = constrain(leftspeed-l*deviation, -255, 255);
+  leftspeed  = constrain(leftspeed-l*deviation, -255, 255);
+
+  pastgap = gap;
 }
 
 // ターゲットの更新
 void updateTargetCnt(){
   past_right_target_cnt = rightcnt;
-  past_left_target_cnt = leftcnt;
+  past_left_target_cnt  = leftcnt;
 }
 
 // 目標と一致したか
 boolean is_matched(){
   if(rightcnt == right_target_cnt && leftcnt == left_target_cnt){
     rightsum = 0;
-    leftsum = 0;
-    gap_sum = 0;
+    leftsum  = 0;
+    gap_sum  = 0;
     if(delayTimer-millis() >= 500){
       brake();
       updateTargetCnt();
@@ -154,7 +181,8 @@ int forward(int speed, double dist){
   loopTimer = micros();
   if(is_first_time){
     right_target_cnt += (double)cnt_par_round/2/PI/radius*dist;
-    left_target_cnt += (double)cnt_par_round/2/PI/radius*dist;
+    left_target_cnt  += (double)cnt_par_round/2/PI/radius*dist;
+    motortimer = millis();
     is_first_time = false;
   }
 
@@ -168,7 +196,7 @@ void forward(int speed){
   loopTimer = micros();
 
   rightspeed = speed;
-  leftspeed = speed;
+  leftspeed  = speed;
   embed_difference(1, 1);
   motorDrive();
 
@@ -183,7 +211,8 @@ int back(int speed, double dist){
   loopTimer = micros();
   if(is_first_time){
     right_target_cnt -= (double)cnt_par_round/2/PI/radius*dist;
-    left_target_cnt -= (double)cnt_par_round/2/PI/radius*dist;
+    left_target_cnt  -= (double)cnt_par_round/2/PI/radius*dist;
+    motortimer = millis();
     is_first_time = false;
   }
 
@@ -197,7 +226,7 @@ void back(int speed){
   loopTimer = micros();
 
   rightspeed = -speed;
-  leftspeed = -speed;
+  leftspeed  = -speed;
   embed_difference(-1, -1);
   motorDrive();
 
@@ -212,7 +241,8 @@ int right_rotation(int speed, double rad){
   loopTimer = micros();
   if(is_first_time){
     right_target_cnt -= (cnt_par_round*tread)/(720*radius)*rad;
-    left_target_cnt += (cnt_par_round*tread)/(720*radius)*rad;
+    left_target_cnt  += (cnt_par_round*tread)/(720*radius)*rad;
+    motortimer = millis();
     is_first_time = false;
   }
 
@@ -226,7 +256,7 @@ void right_rotation(int speed){
   loopTimer = micros();
 
   rightspeed = -speed;
-  leftspeed = speed;
+  leftspeed  = speed;
   embed_difference(-1, 1);
   motorDrive();
 
@@ -241,7 +271,8 @@ int left_rotation(int speed, double rad){
   loopTimer = micros();
   if(is_first_time){
     right_target_cnt += (cnt_par_round*tread)/(720*radius)*rad;
-    left_target_cnt -= (cnt_par_round*tread)/(720*radius)*rad;
+    left_target_cnt  -= (cnt_par_round*tread)/(720*radius)*rad;
+    motortimer = millis();
     is_first_time = false;
   }
 
@@ -255,7 +286,7 @@ void left_rotation(int speed){
   loopTimer = micros();
 
   rightspeed = speed;
-  leftspeed = -speed;
+  leftspeed  = -speed;
   embed_difference(1, -1);
   motorDrive();
 
@@ -346,6 +377,26 @@ void ballShoot() {
 }
 
 
+/////////////////////////////////////////////////////////////////
+// foto sensor
+/////////////////////////////////////////////////////////////////
+// センサを読む
+void readfot(){
+  for(int i = 0; i < FOT_NUM; i++){
+    light[i] = analogRead(i);
+  }
+}
+// 最大値と最小値を更新
+void getminmax(){
+  for(int i = 0; i < FOT_NUM; i++){
+    maxlight[i] = max(maxlight[i], light[i]);
+    minlight[i] = min(minlight[i], light[i]);
+  }
+}
+
+
+/////////////////////////////////////////////////////////////////
+// encoder
 /////////////////////////////////////////////////////////////////
 // 右のエンコーダーを読む
 void read_enca(){
