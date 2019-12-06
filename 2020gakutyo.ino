@@ -14,6 +14,8 @@ Servo rfinger, lfinger;
 // echo, trig
 HCSR04 frontUltrasound(50, 52);
 
+// robot coordinate
+double x = 0, y = 0, angle = 0;
 
 // robot constant
 const double radius = 5.75/2;
@@ -41,6 +43,7 @@ const int FOT_NUM = 8;
 const int MAXLIGHT = 10000;
 const int MINLIGHT = 0;
 const int MIDDLELIGHT = (MAXLIGHT+MINLIGHT)/2;
+const double lpf = 0.2;
 
 int32_t light[FOT_NUM];
 int32_t maxlight[FOT_NUM];
@@ -52,7 +55,9 @@ int32_t gap, pastgap = 0;
 int32_t gap_sum = 0;
 int32_t rightsum = 0, leftsum = 0;
 int32_t right_target_cnt = 0, left_target_cnt = 0;
-int32_t past_right_target_cnt = 0, past_left_target_cnt = 0;
+
+// manipulation
+int32_t gap_angle, pastgap_angle = 0;
 
 // timer
 int32_t motortimer;
@@ -60,11 +65,9 @@ int32_t delayTimer;
 int32_t loopTimer;
 int32_t now;
 
-// flag
-boolean is_first_time = true;
 
 void setup(){
-  /* Serial.begin(115200); */
+  Serial.begin(115200);
 
   attachInterrupt(digitalPinToInterrupt(50), read_enca, CHANGE);
   attachInterrupt(digitalPinToInterrupt(46), read_encb, CHANGE);
@@ -79,10 +82,18 @@ void setup(){
   /* delay(1000); */
 
   delayTimer = millis();
-  loopTimer  = micros();
 }
 
 void loop(){
+}
+
+void hogehgoe(){
+  Serial.print(x);
+  Serial.print("\t");
+  Serial.print(y);
+  Serial.print("\t");
+  Serial.print(angle);
+  Serial.print("\n");
 }
 
 
@@ -90,12 +101,54 @@ void loop(){
 // motor
 /////////////////////////////////////////////////////////////////
 
+// 角度を合わせる
+void angle_modified(){
+  angle += (rightcnt-right_target_cnt)*720*radius/(cnt_par_round*tread);
+  while(angle < 0) angle += 360;
+  while(angle > 360) angle -= 360;
+  updateTargetCnt();
+}
+
+// 座標を合わせる
+void coordinate_modified(){
+  double dist = (rightcnt-right_target_cnt)*2*PI*radius/cnt_par_round;
+  x += dist*cos(radius/180*PI);
+  y += dist*sin(radius/180*PI);
+  updateTargetCnt();
+}
+
+
+
+// ボールの向きに向く
+void fit_to_ball(int speed){
+  while(1){
+    loopTimer = micros();
+    gap_angle = constrain(map(analogRead(0)-analogRead(1), -700, 700, -speed, speed), -speed, speed);
+
+    if(gap_angle){
+      left_rotation(max(35, abs(gap_angle)));
+    }else if(gap_angle < 0){
+      right_rotation(max(35, abs(gap_angle)));
+    }else break;
+
+    if(gap_angle*pastgap_angle < 0) break;
+
+    pastgap_angle = gap_angle;
+
+    wait();
+  }
+  pastgap_angle = 0;
+  angle_modified();
+  brake();
+}
+
 // ラインに対して直角に移動する
 void adjust_angle(){
 }
 
 // 待機
 void wait(){
+  loopTimer = micros();
   do{
     now = micros();
   }while(now-loopTimer <= 1000);
@@ -103,6 +156,8 @@ void wait(){
 
 // 進ませる
 void motorDrive(){
+  rightspeed = constrain(rightspeed, -255, 255);
+  leftspeed = constrain(leftspeed, -255, 255);
   right_motor.setSpeed(rightspeed);
   left_motor.setSpeed(leftspeed);
 }
@@ -121,18 +176,14 @@ void moveToGoal(int speed, int r, int l){
   rightspeed *= gain;
   leftspeed *= gain;
 
-  // 差を無くす
   embed_difference(r, l);
 
-  // 目標到達
   if(rightcnt == right_target_cnt) rightspeed = 0;
   if(leftcnt  == left_target_cnt) leftspeed   = 0;
 
-  // 過去の値更新
   pastrightspeed = rightspeed;
   pastleftspeed  = leftspeed;
 
-  // モーターを動かす
   motorDrive();
 
   wait();
@@ -140,7 +191,7 @@ void moveToGoal(int speed, int r, int l){
 
 // 差を埋める
 void embed_difference(int r, int l){
-  gap = l*(leftcnt-past_left_target_cnt)-r*(rightcnt-past_right_target_cnt);
+  gap = l*(leftcnt-left_target_cnt)-r*(rightcnt-right_target_cnt);
   gap_sum = constrain(gap_sum+gap, -MAXSUM, MAXSUM);
   // PID
   deviation = gap*sumpgain+gap_sum*sumigain+(gap-pastgap)*sumdgain;
@@ -153,8 +204,8 @@ void embed_difference(int r, int l){
 
 // ターゲットの更新
 void updateTargetCnt(){
-  past_right_target_cnt = rightcnt;
-  past_left_target_cnt  = leftcnt;
+  right_target_cnt = rightcnt;
+  left_target_cnt  = leftcnt;
 }
 
 // 目標と一致したか
@@ -165,8 +216,6 @@ boolean is_matched(){
     gap_sum  = 0;
     if(delayTimer-millis() >= 500){
       brake();
-      updateTargetCnt();
-      is_first_time = true;
       return true;
     }
   }else{
@@ -177,19 +226,16 @@ boolean is_matched(){
 }
 
 // 任意の距離前進
-int forward(int speed, double dist){
-  loopTimer = micros();
-  if(is_first_time){
-    right_target_cnt += (double)cnt_par_round/2/PI/radius*dist;
-    left_target_cnt  += (double)cnt_par_round/2/PI/radius*dist;
-    motortimer = millis();
-    is_first_time = false;
+void forward(int speed, double dist){
+  right_target_cnt += (double)cnt_par_round/2/PI/radius*dist;
+  left_target_cnt  += (double)cnt_par_round/2/PI/radius*dist;
+  motortimer = millis();
+  x += dist*cos(angle/180*PI);
+  y += dist*sin(angle/180*PI);
+
+  while(!is_matched()){
+    moveToGoal(speed, 1, 1);
   }
-
-  moveToGoal(speed, 1, 1);
-
-  if(is_matched()) return 0;
-  return 1;
 }
 // 任意の速度で前進
 void forward(int speed){
@@ -203,23 +249,20 @@ void forward(int speed){
   wait();
 }
 void forward(){
-  forward(255);
+  forward(150);
 }
 
 // 任意の距離後退
-int back(int speed, double dist){
-  loopTimer = micros();
-  if(is_first_time){
-    right_target_cnt -= (double)cnt_par_round/2/PI/radius*dist;
-    left_target_cnt  -= (double)cnt_par_round/2/PI/radius*dist;
-    motortimer = millis();
-    is_first_time = false;
+void back(int speed, double dist){
+  right_target_cnt -= (double)cnt_par_round/2/PI/radius*dist;
+  left_target_cnt  -= (double)cnt_par_round/2/PI/radius*dist;
+  x -= dist*cos(angle/180*PI);
+  y -= dist*sin(angle/180*PI);
+  motortimer = millis();
+
+  while(!is_matched()){
+    moveToGoal(speed, -1, -1);
   }
-
-  moveToGoal(speed, -1, -1);
-
-  if(is_matched()) return 0;
-  return 1;
 }
 // 任意の速度で後退
 void back(int speed){
@@ -233,23 +276,20 @@ void back(int speed){
   wait();
 }
 void back(){
-  back(255);
+  back(150);
 }
 
 // 任意の角度右旋回
-int right_rotation(int speed, double rad){
-  loopTimer = micros();
-  if(is_first_time){
-    right_target_cnt -= (cnt_par_round*tread)/(720*radius)*rad;
-    left_target_cnt  += (cnt_par_round*tread)/(720*radius)*rad;
-    motortimer = millis();
-    is_first_time = false;
+void right_rotation(int speed, double rad){
+  right_target_cnt -= (cnt_par_round*tread)/(720*radius)*rad;
+  left_target_cnt  += (cnt_par_round*tread)/(720*radius)*rad;
+  angle -= rad;
+  while(angle < 0) angle += 360;
+  motortimer = millis();
+
+  while(!is_matched()){
+    moveToGoal(speed, -1, 1);
   }
-
-  moveToGoal(speed, -1, 1);
-
-  if(is_matched()) return 0;
-  return 1;
 }
 // 任意の速度で右旋回
 void right_rotation(int speed){
@@ -263,23 +303,20 @@ void right_rotation(int speed){
   wait();
 }
 void right_rotation(){
-  right_rotation(255);
+  right_rotation(150);
 }
 
 // 任意の角度左旋回
-int left_rotation(int speed, double rad){
-  loopTimer = micros();
-  if(is_first_time){
-    right_target_cnt += (cnt_par_round*tread)/(720*radius)*rad;
-    left_target_cnt  -= (cnt_par_round*tread)/(720*radius)*rad;
-    motortimer = millis();
-    is_first_time = false;
+void left_rotation(int speed, double rad){
+  right_target_cnt += (cnt_par_round*tread)/(720*radius)*rad;
+  left_target_cnt  -= (cnt_par_round*tread)/(720*radius)*rad;
+  motortimer = millis();
+  angle += rad;
+  while(angle > 360) angle -= 360;
+
+  while(!is_matched()){
+    moveToGoal(speed, 1, -1);
   }
-
-  moveToGoal(speed, 1, -1);
-
-  if(is_matched()) return 0;
-  return 1;
 }
 // 任意の速度で左旋回
 void left_rotation(int speed){
@@ -293,10 +330,14 @@ void left_rotation(int speed){
   wait();
 }
 void left_rotation(){
-  left_rotation(255);
+  left_rotation(150);
 }
 
 // ブレーキ
+void brake(int time){
+  brake();
+  delay(time);
+}
 void brake(){
   right_motor.setSpeed(0);
   left_motor.setSpeed(0);
@@ -383,7 +424,7 @@ void ballShoot() {
 // センサを読む
 void readfot(){
   for(int i = 0; i < FOT_NUM; i++){
-    light[i] = analogRead(i);
+    light[i] = analogRead(i+2);
   }
 }
 // 最大値と最小値を更新
