@@ -18,7 +18,7 @@ HCSR04 frontUltrasound(50, 52);
 double x = 0, y = 0, angle = 0;
 
 // robot constant
-const double radius = 5.75/2;
+const double radius = 5.837/2;
 const double tread = 18.5;
 const int cnt_par_round = 918;
 
@@ -87,7 +87,7 @@ void setup(){
 void loop(){
 }
 
-void hogehgoe(){
+void debug(){
   Serial.print(x);
   Serial.print("\t");
   Serial.print(y);
@@ -103,6 +103,7 @@ void hogehgoe(){
 
 // 角度を合わせる
 void angle_modified(){
+  brake();
   angle += (rightcnt-right_target_cnt)*720*radius/(cnt_par_round*tread);
   while(angle < 0) angle += 360;
   while(angle > 360) angle -= 360;
@@ -111,13 +112,12 @@ void angle_modified(){
 
 // 座標を合わせる
 void coordinate_modified(){
+  brake();
   double dist = (rightcnt-right_target_cnt)*2*PI*radius/cnt_par_round;
   x += dist*cos(radius/180*PI);
   y += dist*sin(radius/180*PI);
   updateTargetCnt();
 }
-
-
 
 // ボールの向きに向く
 void fit_to_ball(int speed){
@@ -125,21 +125,20 @@ void fit_to_ball(int speed){
     loopTimer = micros();
     gap_angle = constrain(map(analogRead(0)-analogRead(1), -700, 700, -speed, speed), -speed, speed);
 
-    if(gap_angle){
+    if(gap_angle == 0) break;
+    if(gap_angle*pastgap_angle < 0) break;
+
+    if(gap_angle > 0){
       left_rotation(max(35, abs(gap_angle)));
     }else if(gap_angle < 0){
       right_rotation(max(35, abs(gap_angle)));
-    }else break;
-
-    if(gap_angle*pastgap_angle < 0) break;
+    }
 
     pastgap_angle = gap_angle;
-
     wait();
   }
   pastgap_angle = 0;
   angle_modified();
-  brake();
 }
 
 // ラインに対して直角に移動する
@@ -239,8 +238,6 @@ void forward(int speed, double dist){
 }
 // 任意の速度で前進
 void forward(int speed){
-  loopTimer = micros();
-
   rightspeed = speed;
   leftspeed  = speed;
   embed_difference(1, 1);
@@ -266,8 +263,6 @@ void back(int speed, double dist){
 }
 // 任意の速度で後退
 void back(int speed){
-  loopTimer = micros();
-
   rightspeed = -speed;
   leftspeed  = -speed;
   embed_difference(-1, -1);
@@ -293,8 +288,6 @@ void right_rotation(int speed, double rad){
 }
 // 任意の速度で右旋回
 void right_rotation(int speed){
-  loopTimer = micros();
-
   rightspeed = -speed;
   leftspeed  = speed;
   embed_difference(-1, 1);
@@ -320,8 +313,6 @@ void left_rotation(int speed, double rad){
 }
 // 任意の速度で左旋回
 void left_rotation(int speed){
-  loopTimer = micros();
-
   rightspeed = speed;
   leftspeed  = -speed;
   embed_difference(1, -1);
