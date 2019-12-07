@@ -5,6 +5,9 @@
 class HCSR04{
   private:
     double duration;
+    double dist[9];
+    double res;
+    int num;
     int cnt;
     int echopin, trigpin;
   public:
