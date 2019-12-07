@@ -11,8 +11,10 @@ CytronMD left_motor(PWM_PWM, 3, 4);
 Servo arm, wrist;
 Servo rfinger, lfinger;
 
-// echo, trig
-HCSR04 frontUltrasound(50, 52);
+// ultrasound sensor constructor
+HCSR04 frontUltrasound(19, 17);
+HCSR04 rightUltrasound(14, 15);
+HCSR04  leftUltrasound(18, 28);
 
 // robot coordinate
 double x = 0, y = 0, angle = 0;
@@ -82,6 +84,13 @@ void setup(){
   /* delay(1000); */
 
   delayTimer = millis();
+
+  pinMode(19, INPUT);
+  pinMode(17, OUTPUT);
+  pinMode(14, INPUT);
+  pinMode(15, OUTPUT);
+  pinMode(18, INPUT);
+  pinMode(28, OUTPUT);
 }
 
 void loop(){
