@@ -350,10 +350,10 @@ void brake(){
 
 // サーボ角の初期値ぎめ
 void servo_init(){
-  arm.attach(22);
-  wrist.attach(24);
-  rfinger.attach(26);
-  lfinger.attach(28);
+  arm.attach(21);
+  wrist.attach(20);
+  rfinger.attach(5);
+  lfinger.attach(6);
 
   armpoint[highest]   = 730;
   armpoint[lower]     = 2150;
@@ -382,12 +382,17 @@ void MoveFinger(Point e) {
   lfinger.writeMicroseconds(lfingerpoint[e]);
 }
 
-// ボールを持ち上げる動作
-void lift() {
+// ボールを保持する
+void ballPreserve{
   for (int i = wristpoint[lower]; i <= wristpoint[halfway]; i++) {
     wrist.writeMicroseconds(i);
     delay(1);
   }
+}
+
+// ボールを持ち上げる動作
+void ballLift() {
+  ballPreserve();
   delay(1000);
   for (int i = armpoint[lower]; i >= armpoint[highest]; i--) {
     arm.writeMicroseconds(i);
