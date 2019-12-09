@@ -76,12 +76,12 @@ void setup(){
 
   servo_init();
 
-  /* arm.writeMicroseconds(1900); */
-  /* wrist.writeMicroseconds(1800); */
-  /* delay(500); */
-  /* rfinger.writeMicroseconds(2250); */
-  /* lfinger.writeMicroseconds(650); */
-  /* delay(1000); */
+  arm.writeMicroseconds(1900);
+  wrist.writeMicroseconds(1800);
+  delay(500);
+  rfinger.writeMicroseconds(2250);
+  lfinger.writeMicroseconds(650);
+  delay(1000);
 
   delayTimer = millis();
 
@@ -91,9 +91,41 @@ void setup(){
   pinMode(15, OUTPUT);
   pinMode(18, INPUT);
   pinMode(28, OUTPUT);
+
+  /* angle += 90; */
 }
 
 void loop(){
+}
+
+void test(){
+  MoveArm(lower);
+  MoveFinger(open);
+
+  delay(1000);
+
+  fit_to_ball(120);
+  while(max(analogRead(0), analogRead(1)) <= 800) forward(150);
+  coordinate_modified();
+  fit_to_ball(60);
+
+  forward(100, 6);
+
+  MoveFinger(close);
+  ballPreserve();
+
+  face_any_angle(100, 0);
+  forward(150, 30);
+
+  ballLift();
+  forward(150, 10);
+
+  ballShoot();
+  delay(1000);
+  
+  back(150, 10);
+  moving_location(150, 0, 0);
+  face_any_angle(150, 0);
 }
 
 void debug(){
@@ -109,6 +141,23 @@ void debug(){
 /////////////////////////////////////////////////////////////////
 // motor
 /////////////////////////////////////////////////////////////////
+
+// 任意の座標に移動
+void moving_location(int speed, double x1, double y1){
+  face_any_angle(speed, atan2(y1-y, x1-x)*180/PI);
+  forward(speed, sqrt((y1-y)*(y1-y)+(x1-x)*(x1-x)));
+}
+
+// 任意の角度を向く
+void face_any_angle(int speed, double x){
+  if(x < angle){
+    if(angle-x < 180) right_rotation(speed, angle-x);
+    else left_rotation(speed, x+360-angle);
+  }else{
+    if(x-angle < 180) left_rotation(speed, x-angle);
+    else right_rotation(speed, angle+360-x);
+  }
+}
 
 // 角度を合わせる
 void angle_modified(){
@@ -383,7 +432,7 @@ void MoveFinger(Point e) {
 }
 
 // ボールを保持する
-void ballPreserve{
+void ballPreserve(){
   for (int i = wristpoint[lower]; i <= wristpoint[halfway]; i++) {
     wrist.writeMicroseconds(i);
     delay(1);
@@ -392,7 +441,6 @@ void ballPreserve{
 
 // ボールを持ち上げる動作
 void ballLift() {
-  ballPreserve();
   delay(1000);
   for (int i = armpoint[lower]; i >= armpoint[highest]; i--) {
     arm.writeMicroseconds(i);
