@@ -46,10 +46,16 @@ const int MAXLIGHT = 10000;
 const int MINLIGHT = 0;
 const int MIDDLELIGHT = (MAXLIGHT+MINLIGHT)/2;
 const double lpf = 0.2;
+int maxBrightness;
+int minBrightness;
 
 int32_t light[FOT_NUM];
-int32_t maxlight[FOT_NUM];
-int32_t minlight[FOT_NUM];
+int32_t maxlight[FOT_NUM] = {
+  971, 956, 970, 964, 952, 952, 954, 971
+};
+int32_t minlight[FOT_NUM] = {
+  0, 0, 0, 0, 0, 0, 0, 0
+};
 
 // encoder
 int32_t rightcnt = 0, leftcnt = 0;
@@ -95,38 +101,41 @@ void setup(){
   /* angle += 90; */
 }
 
+int past = 1;
+int ima = 1;
 void loop(){
+  readfot();
+  fot_normalize();
+  showfot();
+
+  if(maxBrightness <= MIDDLELIGHT){
+    ima = 1;
+  }else if(minBrightness >= MIDDLELIGHT){
+    ima = 0;
+  }else{
+    ima = 2;
+  }
+
+  if(ima == 2 && past != 2) angle_modified();
+  else if(ima != past) coordinate_modified();
+
+  if(ima == 1) forward(60);
+  if(ima == 0) back(60);
+  if(ima == 2){
+    int omega = map(maxBrightness-minBrightness, 1500, 8000, 6, 80);
+    omega = constrain(omega, 6, 80);
+    if(light[0] < light[7]) right_rotation(omega);
+    else left_rotation(omega);
+
+    if(maxBrightness-minBrightness <= 1800){
+      while(1) brake();
+    }
+  }
+
+
+  past = ima;
 }
 
-void test(){
-  MoveArm(lower);
-  MoveFinger(open);
-
-  delay(1000);
-
-  fit_to_ball(120);
-  while(max(analogRead(0), analogRead(1)) <= 800) forward(150);
-  coordinate_modified();
-  fit_to_ball(60);
-
-  forward(100, 6);
-
-  MoveFinger(close);
-  ballPreserve();
-
-  face_any_angle(100, 0);
-  forward(150, 30);
-
-  ballLift();
-  forward(150, 10);
-
-  ballShoot();
-  delay(1000);
-  
-  back(150, 10);
-  moving_location(150, 0, 0);
-  face_any_angle(150, 0);
-}
 
 void debug(){
   Serial.print(x);
@@ -136,7 +145,6 @@ void debug(){
   Serial.print(angle);
   Serial.print("\n");
 }
-
 
 /////////////////////////////////////////////////////////////////
 // motor
@@ -405,7 +413,7 @@ void servo_init(){
   lfinger.attach(6);
 
   armpoint[highest]   = 730;
-  armpoint[lower]     = 2150;
+  armpoint[lower]     = 2100;
   wristpoint[highest] = 800;
   wristpoint[halfway] = 2300;
   wristpoint[lower]   = 2000;
@@ -475,17 +483,63 @@ void ballShoot() {
 // foto sensor
 /////////////////////////////////////////////////////////////////
 // センサを読む
+void fot_init(){
+  int start = millis();
+  while(millis()-start <= 3000){
+    readfot();
+    getminmax();
+  }
+}
 void readfot(){
   for(int i = 0; i < FOT_NUM; i++){
     light[i] = analogRead(i+2);
   }
 }
+
 // 最大値と最小値を更新
 void getminmax(){
   for(int i = 0; i < FOT_NUM; i++){
     maxlight[i] = max(maxlight[i], light[i]);
     minlight[i] = min(minlight[i], light[i]);
   }
+}
+
+// 正規化
+void fot_normalize(){
+  for(int i = 0; i < FOT_NUM; i++){
+    light[i] = map(light[i], minlight[i], maxlight[i], MINLIGHT, MAXLIGHT);
+    light[i] = constrain(light[i], MINLIGHT, MAXLIGHT);
+
+    if(i == 0){
+      maxBrightness = light[i];
+      minBrightness = light[i];
+    }else{
+      maxBrightness = max(maxBrightness, light[i]);
+      minBrightness = min(minBrightness, light[i]);
+    }
+  }
+}
+
+// debug
+void showfot(){
+  for(int i = 0; i < FOT_NUM; i++){
+    if(i) Serial.print(",");
+    Serial.print(light[i]);
+  }
+  Serial.print("\n");
+}
+void showfotminmax(){
+  Serial.print("MAX: ");
+  for(int i = 0; i < FOT_NUM; i++){
+    Serial.println(maxlight[i]);
+  }
+  Serial.print("\n");
+
+  Serial.print("MIN: ");
+  for(int i = 0; i < FOT_NUM; i++){
+    Serial.println(minlight[i]);
+  }
+  Serial.print("\n");
 }
 
 
