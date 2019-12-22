@@ -18,6 +18,8 @@ HCSR04  leftUltrasound(18, 28);
 
 // robot coordinate
 double x = 0, y = 0, angle = 0;
+// 0~14
+int line = 3;
 
 // robot constant
 const double radius = 5.837/2;
@@ -41,7 +43,7 @@ int rfingerpoint[maxpoint];
 int lfingerpoint[maxpoint];
 
 // foto sensor
-const int FOT_NUM = 8;
+const int FOT_NUM = 2;
 const int MAXLIGHT = 10000;
 const int MINLIGHT = 0;
 const int MIDDLELIGHT = (MAXLIGHT+MINLIGHT)/2;
@@ -52,34 +54,14 @@ int minBrightness;
 int32_t light[FOT_NUM];
 int32_t pastlight[FOT_NUM];
 // 本番に似た環境
-int32_t maxlight[FOT_NUM] = {
-  /* 316, 119, 296, 187, 85, 86, 132, 277 */
-2678*0.9,
-1038*0.9,
-2774*0.9,
-1804*0.9,
- 780*0.9, 
- 791*0.9, 
-1290*0.9,
-2771*0.9
-};
-int32_t minlight[FOT_NUM] = {
-  /* 58,   52,  58,  54, 51, 51,  53,  58 */
-  30*20, 
-  27*20, 
-  31*20, 
-  29*20, 
-  27*20, 
-  27*20, 
-  27*20, 
-  31*20
-};
+int32_t maxlight[FOT_NUM] = {  /* 316, 277 */  2678*0.9, 2771*0.9  };
+int32_t minlight[FOT_NUM] = {  /* 58, 58 */  30*20,  31*20  };
 // 本番環境
-/* int32_t maxlight[FOT_NUM] = {374, 179, 353, 251, 116, 130, 176, 343}; */
-/* int32_t minlight[FOT_NUM] = {63,   56,  62,  57,  54,  54,  55,  60}; */
+/* int32_t maxlight[FOT_NUM] = {374, 343}; */
+/* int32_t minlight[FOT_NUM] = {63,   60}; */
 // 白黒
-/* int32_t maxlight[FOT_NUM] = {971, 956, 970, 964, 952, 952, 954, 971}; */
-/* int32_t minlight[FOT_NUM] = {  0,   0,   0,   0,   0,   0,   0,   0}; */
+/* int32_t maxlight[FOT_NUM] = {971, 971}; */
+/* int32_t minlight[FOT_NUM] = {  0,   0}; */
 
 // encoder
 int32_t rightcnt = 0, leftcnt = 0;
@@ -90,7 +72,7 @@ int32_t right_target_cnt = 0, left_target_cnt = 0;
 
 // manipulation
 int32_t gap_angle, pastgap_angle = 0;
-enum Color {WHITE, BRACK};
+enum Color {WhiteToBrack, BrackToWhite};
 
 // timer
 int32_t motortimer;
@@ -131,8 +113,9 @@ void setup(){
 }
 
 void loop(){
-  MoveVertically(WHITE);
-  /* MoveVertically(BRACK); */
+  MoveVertically(BrackToWhite);
+  delay(1000);
+  forward(150, 10);
   while(1);
 }
 
@@ -145,11 +128,11 @@ int MoveVertically(Color color){
     fot_normalize();
 
     if(maxBrightness <= MIDDLELIGHT){
-      if(color == WHITE) ima = 1;
-      if(color == BRACK) ima = 0;
+      if(color == WhiteToBrack) ima = 1;
+      if(color == BrackToWhite) ima = 0;
     }else if(minBrightness >= MIDDLELIGHT){
-      if(color == WHITE) ima = 0;
-      if(color == BRACK) ima = 1;
+      if(color == WhiteToBrack) ima = 0;
+      if(color == BrackToWhite) ima = 1;
     }else{
       ima = 2;
     }
@@ -163,15 +146,15 @@ int MoveVertically(Color color){
       
       int omega = map(maxBrightness-minBrightness, 4000, 6000, 4, 50);
       omega = constrain(omega, 4, 50);
-      sum = constrain(sum+((omega>0)? 1: -1), -MAXSUM, MAXSUM);
+      sum = constrain(sum+omega/4, -MAXSUM, MAXSUM);
 
-      if(light[0] < light[7]){
-        if(color == WHITE) right_rotation(omega+sum*0.04);
-        if(color == BRACK)  left_rotation(omega+sum*0.04);
+      if(light[0] < light[1]){
+        if(color == WhiteToBrack) right_rotation(omega+sum*0.04);
+        if(color == BrackToWhite)  left_rotation(omega+sum*0.04);
       }
       else{
-        if(color == WHITE) left_rotation(omega+sum*0.04);
-        if(color == BRACK) right_rotation(omega+sum*0.04);
+        if(color == WhiteToBrack) left_rotation(omega+sum*0.04);
+        if(color == BrackToWhite) right_rotation(omega+sum*0.04);
       }
 
       if(maxBrightness-minBrightness <= 400){
@@ -543,35 +526,19 @@ void fot_init(){
     getminmax();
   }
 }
+
 void readfot(){
-  /* int maximum[FOT_NUM]; */
-  /* int minimum[FOT_NUM]; */
   for(int i = 0; i < FOT_NUM; i++){
     light[i] = 0;
-    /* maximum[i] = -100000; */
-    /* minimum[i] = 100000; */
   }
-  /* for(int k = 0; k < 10; k++){ */
-  /*   for(int i = 0; i < FOT_NUM; i++){ */
-  /*     light[i] += analogRead(i+2); */
-  /*     maximum[i] = max(maximum[i], light[i]); */
-  /*     minimum[i] = min(minimum[i], light[i]); */
-  /*   } */
-  /* } */
 
   for(int i = 0; i < 10; i++){
     light[0] += analogRead(2);
-    light[7] += analogRead(9);
+    light[1] += analogRead(9);
   }
 
-  /* light[0] = 0.95*pastlight[0]+0.05*light[0]; */
-  /* light[7] = 0.95*pastlight[7]+0.05*light[7]; */
-  /* for(int i = 0; i < FOT_NUM; i++){ */
-  /*   light[i] = 0.95*pastlight[i]+0.05*light[i]; */
-  /* } */
-
   pastlight[0] = light[0];
-  pastlight[7] = light[7];
+  pastlight[1] = light[1];
 }
 
 // 最大値と最小値を更新
@@ -591,7 +558,7 @@ void fot_normalize(){
     if(i == 0){
       maxBrightness = light[i];
       minBrightness = light[i];
-    }else if(i == 7){
+    }else{
       maxBrightness = max(maxBrightness, light[i]);
       minBrightness = min(minBrightness, light[i]);
     }
