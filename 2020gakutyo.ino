@@ -47,21 +47,22 @@ const int FOT_NUM = 2;
 const int MAXLIGHT = 10000;
 const int MINLIGHT = 0;
 const int MIDDLELIGHT = (MAXLIGHT+MINLIGHT)/2;
-const double lpf = 0.2;
 int maxBrightness;
 int minBrightness;
 
 int32_t light[FOT_NUM];
 int32_t pastlight[FOT_NUM];
-// 本番に似た環境
-int32_t maxlight[FOT_NUM] = {  /* 316, 277 */  2678*0.9, 2771*0.9  };
-int32_t minlight[FOT_NUM] = {  /* 58, 58 */  30*20,  31*20  };
-// 本番環境
-/* int32_t maxlight[FOT_NUM] = {374, 343}; */
-/* int32_t minlight[FOT_NUM] = {63,   60}; */
 // 白黒
 /* int32_t maxlight[FOT_NUM] = {971, 971}; */
 /* int32_t minlight[FOT_NUM] = {  0,   0}; */
+// 本番に似た環境
+/* int32_t maxlight[FOT_NUM] = {  /1* 316, 277 *1/  2678*0.9, 2771*0.9  }; */
+/* int32_t minlight[FOT_NUM] = {  /1* 58, 58 *1/  30*20,  31*20  }; */
+// 本番環境
+int32_t maxlight[FOT_NUM] = {2729, 2907};
+int32_t minlight[FOT_NUM] = {645,   650};
+
+int32_t middlelight[FOT_NUM] = {(maxlight[0]+minlight[0])/2, (maxlight[1]+minlight[1])/2};
 
 // encoder
 int32_t rightcnt = 0, leftcnt = 0;
@@ -72,10 +73,12 @@ int32_t right_target_cnt = 0, left_target_cnt = 0;
 
 // manipulation
 int32_t gap_angle, pastgap_angle = 0;
-enum Color {WhiteToBrack, BrackToWhite};
+enum Color {WhiteToBrack, BrackToWhite, White, Brack};
+Color pastcolor = BRACK;
+Color color = BRACK;
 
 // timer
-int32_t motortimer;
+int32_t motorStartTimer;
 int32_t delayTimer;
 int32_t loopTimer;
 int32_t now;
@@ -84,6 +87,7 @@ int32_t now;
 void setup(){
   Serial.begin(115200);
 
+  // フォトセンサの確認用
   /* fot_init(); */
   /* showfotminmax(); */
   /* while(1); */
@@ -93,15 +97,6 @@ void setup(){
 
   servo_init();
 
-  arm.writeMicroseconds(1900);
-  wrist.writeMicroseconds(1800);
-  delay(500);
-  rfinger.writeMicroseconds(2250);
-  lfinger.writeMicroseconds(650);
-  delay(1000);
-
-  delayTimer = millis();
-
   pinMode(19, INPUT);
   pinMode(17, OUTPUT);
   pinMode(14, INPUT);
@@ -109,20 +104,39 @@ void setup(){
   pinMode(18, INPUT);
   pinMode(28, OUTPUT);
 
-  /* angle += 90; */
+  // 左を向いてスタート
+  angle += 90;
+  delayTimer = millis();
 }
 
 void loop(){
-  MoveVertically(BrackToWhite);
-  delay(1000);
-  forward(150, 10);
+  color = getColor
+  if(getColor() == White) MoveVertically(WhiteToBrack);
+  else MoveVertically(BrackToWhite);
+
+  forward(100, 10);
+
   while(1);
 }
 
+Color getColor(){
+  readfot();
+  if(light[1] <= middlelight[1]) return White;
+  return Brack;
+}
+
+void updateline(){
+  color = getColor();
+  if(pastcolor != Color){
+    if(90 < angle && angle < 270) line--;
+    else line++;
+  }
+  pastcolor = color;
+}
+
 int MoveVertically(Color color){
-  int past = 1;
-  int ima  = 1;
-  int sum  = 0;
+  int past = 1, ima = 1, sum = 0, change = 0;
+  int32_t timer = millis();
   while(true){
     readfot();
     fot_normalize();
@@ -140,28 +154,33 @@ int MoveVertically(Color color){
     if(ima == 2 && past != 2) angle_modified();
     else if(ima != past) coordinate_modified();
 
-    if(ima == 1) forward(60);
-    if(ima == 0) back(60);
+    if(ima == 1) forward(max(90-change*10, 10));
+    if(ima == 0) back(max(90-change*10, 10));
     if(ima == 2){
       
-      int omega = map(maxBrightness-minBrightness, 4000, 6000, 4, 50);
-      omega = constrain(omega, 4, 50);
-      sum = constrain(sum+omega/4, -MAXSUM, MAXSUM);
+      int omg = map(maxBrightness-minBrightness, 4000, 6000, 4, 50);
+      omg = constrain(omg, 4, 50);
+      sum = constrain(sum+omg/4, -MAXSUM, MAXSUM);
 
       if(light[0] < light[1]){
-        if(color == WhiteToBrack) right_rotation(omega+sum*0.04);
-        if(color == BrackToWhite)  left_rotation(omega+sum*0.04);
+        if(color == WhiteToBrack) right_rotation(omg+sum*0.04);
+        if(color == BrackToWhite)  left_rotation(omg+sum*0.04);
       }
       else{
-        if(color == WhiteToBrack) left_rotation(omega+sum*0.04);
-        if(color == BrackToWhite) right_rotation(omega+sum*0.04);
+        if(color == WhiteToBrack) left_rotation(omg+sum*0.04);
+        if(color == BrackToWhite) right_rotation(omg+sum*0.04);
       }
 
+      // 収束
       if(maxBrightness-minBrightness <= 400){
         brake();
-        break;
+        if(millis()-timer <= 500) break;
+      }else{
+        timer = millis();
       }
     }
+
+    if(ima != past) change++;
 
     past = ima;
     wait();
@@ -181,7 +200,6 @@ void debug(){
 /////////////////////////////////////////////////////////////////
 // motor
 /////////////////////////////////////////////////////////////////
-
 // 任意の座標に移動
 void moving_location(int speed, double x1, double y1){
   face_any_angle(speed, atan2(y1-y, x1-x)*180/PI);
@@ -239,10 +257,6 @@ void fit_to_ball(int speed){
   angle_modified();
 }
 
-// ラインに対して直角に移動する
-void adjust_angle(){
-}
-
 // 待機
 void wait(){
   loopTimer = micros();
@@ -261,6 +275,8 @@ void motorDrive(){
 
 // 目標まで進む
 void moveToGoal(int speed, int r, int l){
+  updateline();
+
   rightsum = constrain(rightsum+right_target_cnt-rightcnt, -MAXSUM, MAXSUM);
   leftsum  = constrain(leftsum+left_target_cnt-leftcnt, -MAXSUM, MAXSUM);
 
@@ -268,7 +284,7 @@ void moveToGoal(int speed, int r, int l){
   rightspeed = constrain((right_target_cnt-rightcnt)*pgain+rightsum*igain+(rightspeed-pastrightspeed)*dgain, -speed, speed);
   leftspeed  = constrain((left_target_cnt-leftcnt)*pgain+leftsum*igain+(leftspeed-pastleftspeed)*dgain, -speed, speed);
 
-  double gain = (double)(millis()-motortimer)/1500;
+  double gain = (double)(millis()-motorStartTimer)/1500;
   if(1.0 < gain) gain = 1.0;
   rightspeed *= gain;
   leftspeed *= gain;
@@ -326,7 +342,7 @@ boolean is_matched(){
 void forward(int speed, double dist){
   right_target_cnt += (double)cnt_par_round/2/PI/radius*dist;
   left_target_cnt  += (double)cnt_par_round/2/PI/radius*dist;
-  motortimer = millis();
+  motorStartTimer = millis();
   x += dist*cos(angle/180*PI);
   y += dist*sin(angle/180*PI);
 
@@ -336,6 +352,8 @@ void forward(int speed, double dist){
 }
 // 任意の速度で前進
 void forward(int speed){
+  updateline();
+
   rightspeed = speed;
   leftspeed  = speed;
   embed_difference(1, 1);
@@ -353,7 +371,7 @@ void back(int speed, double dist){
   left_target_cnt  -= (double)cnt_par_round/2/PI/radius*dist;
   x -= dist*cos(angle/180*PI);
   y -= dist*sin(angle/180*PI);
-  motortimer = millis();
+  motorStartTimer = millis();
 
   while(!is_matched()){
     moveToGoal(speed, -1, -1);
@@ -361,6 +379,8 @@ void back(int speed, double dist){
 }
 // 任意の速度で後退
 void back(int speed){
+  updateline();
+
   rightspeed = -speed;
   leftspeed  = -speed;
   embed_difference(-1, -1);
@@ -378,7 +398,7 @@ void right_rotation(int speed, double rad){
   left_target_cnt  += (cnt_par_round*tread)/(720*radius)*rad;
   angle -= rad;
   while(angle < 0) angle += 360;
-  motortimer = millis();
+  motorStartTimer = millis();
 
   while(!is_matched()){
     moveToGoal(speed, -1, 1);
@@ -401,7 +421,7 @@ void right_rotation(){
 void left_rotation(int speed, double rad){
   right_target_cnt += (cnt_par_round*tread)/(720*radius)*rad;
   left_target_cnt  -= (cnt_par_round*tread)/(720*radius)*rad;
-  motortimer = millis();
+  motorStartTimer = millis();
   angle += rad;
   while(angle > 360) angle -= 360;
 
@@ -457,6 +477,13 @@ void servo_init(){
   lfingerpoint[open]  = 1850;
   lfingerpoint[close] = 2250;
   lfingerpoint[shoot] = 2150;
+
+  arm.writeMicroseconds(1900);
+  wrist.writeMicroseconds(1800);
+  delay(500);
+  rfinger.writeMicroseconds(2250);
+  lfinger.writeMicroseconds(650);
+  delay(1000);
 }
 
 // アームを動かす
